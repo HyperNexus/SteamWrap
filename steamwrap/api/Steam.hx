@@ -10,6 +10,8 @@ import steamwrap.api.Steam.SteamUGCDetails;
 import steamwrap.api.Steam.SteamUGCQueryCompleted;
 import steamwrap.helpers.Loader;
 import steamwrap.helpers.Util;
+import haxe.io.Bytes;
+import haxe.io.BytesData;
 
 private enum LeaderboardOp
 {
@@ -87,6 +89,8 @@ class Steam
 	public static var whenItemInstalled:String->Void;
 	public static var whenItemDownloaded:Bool->String->Void;
 	public static var whenQueryUGCRequestSent:SteamUGCQueryCompleted->Void;
+
+	public static var whenGetAuthSessionTicket:Bool->Int->Void;
 	
 	/**
 	 * @param appId_	Your Steam APP ID (the numbers on the end of your store page URL - store.steampowered.com/app/XYZ)
@@ -133,6 +137,8 @@ class Steam
 			SteamWrap_RequestGlobalStats = cpp.Lib.load("steamwrap", "SteamWrap_RequestGlobalStats", 0);
 			SteamWrap_RestartAppIfNecessary = cpp.Lib.load("steamwrap", "SteamWrap_RestartAppIfNecessary", 1);
 			SteamWrap_OpenOverlay = cpp.Lib.load("steamwrap", "SteamWrap_OpenOverlay", 1);
+			SteamWrap_GetAuthSessionTicket = cpp.Lib.load("steamwrap", "SteamWrap_GetAuthSessionTicket", 0);
+			SteamWrap_CancelAuthTicket = cpp.Lib.load("steamwrap", "SteamWrap_CancelAuthTicket", 1);
 		}
 		catch (e:Dynamic) {
 			customTrace("Running non-Steam version (" + e + ")");
@@ -324,6 +330,17 @@ class Steam
 			wantStoreStats = false;
 			SteamWrap_StoreStats();
 		}
+	}
+
+	public static function getAuthSessionTicket(): Bytes {
+		if (!active) null;
+		var bytes: BytesData = SteamWrap_GetAuthSessionTicket();
+		return Bytes.ofData(bytes);
+	}
+
+	public static function cancelAuthTicket(ticket: Int) {
+		if (!active) return;
+		SteamWrap_CancelAuthTicket(ticket);
 	}
 	
 	public static function openOverlay(url:String) {
@@ -568,6 +585,11 @@ class Steam
 					var result = SteamUGCQueryCompleted.fromString(data);
 					whenQueryUGCRequestSent(result);
 				}
+			case "GetAuthSessionTicket": 
+				if (whenGetAuthSessionTicket != null) {
+					var result:String = cast data;
+					whenGetAuthSessionTicket(success, Std.parseInt(result));
+				}
 		}
 	}
 	
@@ -603,6 +625,8 @@ class Steam
 	private static var SteamWrap_IsSteamRunning:Dynamic;
 	private static var SteamWrap_GetCurrentGameLanguage:Dynamic;
 	private static var SteamWrap_OpenOverlay:Dynamic;
+	private static var SteamWrap_GetAuthSessionTicket:Dynamic;
+	private static var SteamWrap_CancelAuthTicket:Dynamic;
 }
 
 class LeaderboardScore {

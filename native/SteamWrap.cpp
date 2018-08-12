@@ -122,6 +122,7 @@ static const char* kEventTypeOnGetPublishedFileDetails = "PublishedFileDetailsGo
 static const char* kEventTypeOnDownloadItem = "ItemDownloaded";
 static const char* kEventTypeOnItemInstalled = "ItemInstalled";
 static const char* kEventTypeOnUGCQueryCompleted = "UGCQueryCompleted";
+static const char* kEventTypeOnGetAuthSessionTicket = "GetAuthSessionTicket";
 
 //A simple data structure that holds on to the native 64-bit handles and maps them to regular ints.
 //This is because it is cumbersome to pass back 64-bit values over CFFI, and strictly speaking, the haxe 
@@ -242,7 +243,8 @@ public:
  		m_CallbackAchievementStored( this, &CallbackHandler::OnAchievementStored ),
 		m_CallbackGamepadTextInputDismissed( this, &CallbackHandler::OnGamepadTextInputDismissed ),
 		m_CallbackDownloadItemResult( this, &CallbackHandler::OnDownloadItem ),
-		m_CallbackItemInstalled( this, &CallbackHandler::OnItemInstalled )
+		m_CallbackItemInstalled( this, &CallbackHandler::OnItemInstalled ),
+		m_CallbackAuthSessionTicket( this, &CallbackHandler::OnAuthSessionTicket )
 	{}
 
 	STEAM_CALLBACK( CallbackHandler, OnUserStatsReceived, UserStatsReceived_t, m_CallbackUserStatsReceived );
@@ -251,6 +253,7 @@ public:
 	STEAM_CALLBACK( CallbackHandler, OnGamepadTextInputDismissed, GamepadTextInputDismissed_t, m_CallbackGamepadTextInputDismissed );
 	STEAM_CALLBACK( CallbackHandler, OnDownloadItem, DownloadItemResult_t, m_CallbackDownloadItemResult );
 	STEAM_CALLBACK( CallbackHandler, OnItemInstalled, ItemInstalled_t, m_CallbackItemInstalled );
+	STEAM_CALLBACK( CallbackHandler, OnAuthSessionTicket, GetAuthSessionTicketResponse_t, m_CallbackAuthSessionTicket );
 	
 	void FindLeaderboard(const char* name);
 	void OnLeaderboardFound( LeaderboardFindResult_t *pResult, bool bIOFailure);
@@ -798,6 +801,10 @@ void CallbackHandler::OnItemInstalled( ItemInstalled_t *pCallback )
 	PublishedFileId_t m_ugcFileID = pCallback->m_nPublishedFileId;
 	fileIDStream << m_ugcFileID;
 	SendEvent(Event(kEventTypeOnDownloadItem, true, fileIDStream.str().c_str()));
+}
+
+void CallbackHandler::OnAuthSessionTicket( GetAuthSessionTicketResponse_t *pCallback) {
+	SendEvent(Event(kEventTypeOnGetAuthSessionTicket, pCallback->m_eResult == k_EResultOK, data.str().c_str()));
 }
 
 //-----------------------------------------------------------------------------------------------------------
@@ -1493,7 +1500,7 @@ value SteamWrap_GetSubscribedItems()
 		}
 		data << pvecPublishedFileID[i];
 	}
-	delete pvecPublishedFileID;
+	delete[] pvecPublishedFileID;
 	
 	return alloc_string(data.str().c_str());
 }
@@ -1694,8 +1701,8 @@ value SteamWrap_GetQueryUGCKeyValueTag(value cHandle, value iIndex, value iKeyVa
 	std::ostringstream data;
 	data << pchKey << "=" << pchValue;
 	
-	delete pchKey;
-	delete pchValue;
+	delete[] pchKey;
+	delete[] pchValue;
 	
 	return alloc_string(data.str().c_str());
 }
@@ -1721,7 +1728,7 @@ value SteamWrap_GetQueryUGCMetadata(value sHandle, value iIndex, value iMetaData
 	std::ostringstream data;
 	data << pchMetadata;
 	
-	delete pchMetadata;
+	delete[] pchMetadata;
 	
 	return alloc_string(data.str().c_str());
 }
@@ -1830,7 +1837,7 @@ DEFINE_PRIME1v(SteamWrap_EnumerateUserPublishedFiles);
 
 void SteamWrap_EnumerateUserSubscribedFiles(int startIndex)
 {
-	if(!CheckInit());
+	if(!CheckInit()) return;
 	uint32 unStartIndex = (uint32) startIndex;
 	s_callbackHandler->EnumerateUserSubscribedFiles(unStartIndex);
 }
@@ -1838,7 +1845,7 @@ DEFINE_PRIME1v(SteamWrap_EnumerateUserSubscribedFiles);
 
 void SteamWrap_GetPublishedFileDetails(const char * fileId, int maxSecondsOld)
 {
-	if(!CheckInit());
+	if(!CheckInit()) return;
 	
 	uint64 u64FileID = strtoull(fileId, NULL, 0);
 	uint32 u32MaxSecondsOld = maxSecondsOld;
@@ -1849,7 +1856,7 @@ DEFINE_PRIME2v(SteamWrap_GetPublishedFileDetails);
 
 void SteamWrap_UGCDownload(const char * handle, int priority)
 {
-	if(!CheckInit());
+	if(!CheckInit()) return;
 	
 	uint64 u64Handle = strtoull(handle, NULL, 0);
 	uint32 u32Priority = (uint32) priority;
@@ -2508,6 +2515,30 @@ value SteamWrap_GetControllerMaxAnalogActionData()
 DEFINE_PRIM(SteamWrap_GetControllerMaxAnalogActionData,0);
 
 //-----------------------------------------------------------------------------------------------------------
+value SteamWrap_GetAuthSessionTicket()
+{
+	if (!CheckInit()) return alloc_string("");
+
+	int cbMaxTicket = 1024;
+	unsigned char *pTicket = new unsigned char[cbMaxTicket];
+	uint32 pcbTicket = 0;
+
+	HAuthTicket hAuthTicket = SteamUser()->GetAuthSessionTicket(pTicket, cbMaxTicket, &pcbTicket);
+
+	value returnValue = bytes_to_hx(pTicket, pcbTicket);
+	
+	delete[] pTicket;
+	
+	return returnValue;
+}
+DEFINE_PRIM(SteamWrap_GetAuthSessionTicket,0);
+
+void SteamWrap_CancelAuthTicket(HAuthTicket hAuthTicket)
+{
+	if (!CheckInit()) return;
+	SteamUser()->CancelAuthTicket(hAuthTicket);
+}
+DEFINE_PRIM(SteamWrap_CancelAuthTicket,1);
 
 void mylib_main()
 {
