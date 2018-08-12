@@ -804,6 +804,8 @@ void CallbackHandler::OnItemInstalled( ItemInstalled_t *pCallback )
 }
 
 void CallbackHandler::OnAuthSessionTicket( GetAuthSessionTicketResponse_t *pCallback) {
+	std::ostringstream data;
+	data << pCallback->m_hAuthTicket;
 	SendEvent(Event(kEventTypeOnGetAuthSessionTicket, pCallback->m_eResult == k_EResultOK, data.str().c_str()));
 }
 
